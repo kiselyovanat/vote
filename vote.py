@@ -67,5 +67,5 @@ class Elector(object):
     def sentIdAndPk(self):              # 7. Каждый избиратель посылает ЦИК: I, d
         pass
 
-    def protest(self):
+    def protest(self):                  # 9. Если избиратель обнаруживает, что его бюллетень подсчитан неправильно, он протестует, посылая ЦИК : I, Ek(I, v), d
         pass
