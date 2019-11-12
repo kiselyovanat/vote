@@ -1,25 +1,40 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 from abc import ABCMeta, abstractmethod
+from Crypto.Cipher import AES
 
 class CIK(object):
 
     def __init__(self):
-        allElectors[] = None
-        voters[] = None
-        bulletins[] = None
+        #allElectors = None
+        self.voters = None
+        self.bulletins = None
 
-    def getElectors(self, filename):    #все избиратели хранятся в файле
-        pass
+    def getElectors(self, filename):    # все избиратели хранятся в файле
+        file = open(filename, 'r')
+        text = file.read()
+        text = text[:len(text)-1]       # символ конца файла убираем
+        self.voters = set(text.split('\n'))    # каждая строка - ФИО избирателя
+        file.close()
 
     def getVoters(self, filename):      #все желающие голосовать отмечаются в файле
-        pass
+        file = open(filename, 'r')
+        text = file.read()
+        text = text[:len(text)-1]       # символ конца файла убираем
+        voters = set(text.split('\n'))     # каждая строка - ФИО избирателя
+        file.close()
+
+        self.voters = self.voters & voters
 
     def publishElectors(self):          # 1. ЦИК публикует список всех правомочных избирателей
-        pass
+        print "Список правомочных избирателей:"
+        for name in self.voters:
+            print name
 
     def publishVoters(self):            # 3. ЦИК публикует список избирателей, участвующих в выборах
-        pass
+        print "Список избирателей, участвующих в выборах:"
+        for name in self.voters:
+            print name
 
     def getBulletinFromVoter(self):     # 6.1 ЦИК получает бюллетень
         pass
@@ -41,21 +56,24 @@ class CIK(object):
 
 class Elector(object):
 
-    def __init__(self):
-         id = None                      # 4. Каждый избиратель получает идентификационный номер
-         name = None
-         isVoter = None
-         openKey = None
-         privateKey = None
-         bulletin = None
+    def __init__(self,id,name):
+         self.id = id                   # 4. Каждый избиратель получает идентификационный номер
+         self.name = name
+         self.isVoter = False
+         self.openKey = None
+         self.privateKey = None
+         self.bulletin = None
 
     def willVote(self,filename):        # 2. В течение определенного срока каждый избиратель сообщает в ЦИК, собирается ли он голосовать
-        pass
+        file = open(filename, 'a')
+        file.write(self.name + '\n')
+        file.close()
+        self.isVoter = True
 
-    def generateOk(self):               # 5.1 Каждый избиратель генерирует открытый ключ
-        pass
+    def vote(self, chosenOne):          # бюллетень - ФИО того, за кого голосует избиратель
+        self.bulletin = chosenOne
 
-    def generatePk(self):               # 5.2 Каждый избиратель генерирует закрытый ключ
+    def generateKeys(self):               # 5.1 Каждый избиратель генерирует открытый ключ и 5.2 закрытый ключ
         pass
 
     def encryptBulletin(self):          # 5.3 избиратель создает Ek(I, v)
@@ -69,3 +87,21 @@ class Elector(object):
 
     def protest(self):                  # 9. Если избиратель обнаруживает, что его бюллетень подсчитан неправильно, он протестует, посылая ЦИК : I, Ek(I, v), d
         pass
+
+C = CIK()
+
+E = Elector(1,"AAA")
+E2 = Elector(2,"dddd")
+
+C.getElectors("electors.txt")
+C.publishElectors()
+
+E.willVote("voters.txt")
+E2.willVote("voters.txt")
+
+C.getVoters("voters.txt")
+C.publishVoters()
+
+
+E.vote("ттт")
+E2.vote("иии")
