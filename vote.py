@@ -1,19 +1,22 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 from abc import ABCMeta, abstractmethod
+from Crypto.PublicKey import RSA
+from Crypto import Random
+from Crypto.Cipher import PKCS1_OAEP
 import base64
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import padding
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives.asymmetric import rsa
+from collections import Counter
+
 
 class CIK(object):
 
     def __init__(self):
         #allElectors = None
         self.voters = None
-        self.bulletins = []
-        self.votersIdAndPk = None
+        self.bulletins = {}
+        self.votersIdAndPk = {}
+        self.decryptedBulletins = {}
+        self.results = None
 
     def getElectors(self, filename):    # все избиратели хранятся в файле
         file = open(filename, 'r')
@@ -32,14 +35,16 @@ class CIK(object):
         self.voters = self.voters & voters
 
     def publishElectors(self):          # 1. ЦИК публикует список всех правомочных избирателей
-        print "Список правомочных избирателей:"
+        print "List of eligible voters:\n"
         for name in self.voters:
             print name
+        print "-------------"
 
     def publishVoters(self):            # 3. ЦИК публикует список избирателей, участвующих в выборах
-        print "Список избирателей, участвующих в выборах:"
+        print "List of voters participating in the elections:\n"
         for name in self.voters:
             print name
+        print "-------------"
 
     def getBulletinFromVoter(self,filename):     # 6.1 ЦИК получает бюллетень
         file = open(filename, 'r')
@@ -47,37 +52,54 @@ class CIK(object):
         file.close()
         text = text[:len(text)-1]       # символ конца файла убираем
 
-        self.bulletins.append(text.split(' '))
+        Id, bul = text.split(' ')
+        self.bulletins[Id] = bul
 
         #print self.bulletins
         #print "----"
 
     def publishBulletin(self):          # 6.2 ЦИК подтверждает получение бюллетеня, публикуя : Ek(I, v)
         #print len(self.bulletins)
-        for i in range(0, len(self.bulletins)):
-            print self.bulletins[i][1]
+        print "Publish bulletins:\n"
+        for key in self.bulletins:
+            print self.bulletins[key] + '\n'
+        print "-------------"
 
-    def getIdAndPkFromVoter(self):      # 8.1 ЦИК получает идентификатор и закрытый ключ от избирателя
+    def getIdAndPkFromVoter(self,filename):      # 8.1 ЦИК получает идентификатор и закрытый ключ от избирателя
         file = open(filename, 'r')
         text = file.read()
         file.close()
         text = text[:len(text)-1]
              # символ конца файла убираем
-        self.votersIdAndPk.append(text.split(' '))
-
+        Id, Pk = text.split(',')
+        self.votersIdAndPk[Id] = Pk
+        #print self.votersIdAndPk
+        #print Id
+        #print Pk
 
     def decryptBulletin(self):          # 8.2 ЦИК расшифровывает бюллетени
-        for i in self.bulletins:
-            #ciphertext = i
-            print "--"
-            print i
-            #ciphertext_decoded = base64.b64decode(ciphertext)
+        for key in self.votersIdAndPk:
+            rsa_private_key = RSA.importKey(self.votersIdAndPk[key])
+            rsa_private_key = PKCS1_OAEP.new(rsa_private_key)
+            decrypted_text = base64.b64decode(self.bulletins[key])
+            decrypted_text = rsa_private_key.decrypt(decrypted_text)
+            self.decryptedBulletins[key] = decrypted_text, self.bulletins[key]
+            #print decrypted_text
+        #print self.decryptedBulletins
 
     def getResult(self):                # 8.3 ЦИК подсчитывает результат
-        pass
+        #for key in self.decryptedBulletins:
+        self.results = Counter(self.decryptedBulletins[key][0] for key in self.decryptedBulletins)
 
     def publishResult(self):            # 8.4 В конце выборов она публикует их результаты и, для каждого варианта выбора, список соответствующий значений Ek(I, v).
-        pass
+        print "Results:\n"
+        for key,value in sorted(self.results.iteritems()):
+                print key, value
+        print "-------------"
+        print "Bulletins:\n"
+        for key in self.decryptedBulletins:
+            print self.decryptedBulletins[key][0], self.decryptedBulletins[key][1] + '\n'
+        print "-------------"
 
 class Elector(object):
 
@@ -100,24 +122,20 @@ class Elector(object):
         self.bulletin = chosenOne
 
     def generateKeys(self):               # 5.1 Каждый избиратель генерирует открытый ключ и 5.2 закрытый ключ
-        self.privateKey = rsa.generate_private_key(public_exponent=65537, key_size=2048, backend=default_backend())
-        self.publicKey = self.privateKey.public_key()
+        key = RSA.generate(2048)
+        self.privateKey = key.export_key('PEM')
+        self.publicKey = key.publickey().exportKey('PEM')
 
         #print self.privateKey
         #print self.publicKey
 
     def encryptBulletin(self):          # 5.3 избиратель создает Ek(I, v)
-        ciphertext = self.publicKey.encrypt(
-          self.bulletin,
-          padding.OAEP(
-                mgf=padding.MGF1(algorithm=hashes.SHA1()),
-                algorithm=hashes.SHA1(),
-                label=None
-              )
-        )
-        ciphertext  = str(base64.b64encode(ciphertext))
-        self.encryptedBulletin = ciphertext
-        #print ciphertext
+        rsa_public_key = RSA.importKey(self.publicKey)
+        rsa_public_key = PKCS1_OAEP.new(rsa_public_key)
+        encrypted = rsa_public_key.encrypt(self.bulletin)
+        encrypted = base64.b64encode(encrypted)
+        self.encryptedBulletin = encrypted
+        #print encrypted
 
     def sentBulletin(self,filename):             # 5.4 избиратель посылает в ЦИК следующее сообщение : I,Ek(I, v)
         file = open(filename, 'w')
@@ -126,7 +144,7 @@ class Elector(object):
 
     def sentIdAndPk(self,filename):              # 7. Каждый избиратель посылает ЦИК: I, d
         file = open(filename, 'w')
-        file.write(str(self.id) + ' ' + str(self.privateKey) + '\n')
+        file.write(str(self.id) + ',' + self.privateKey + '\n')
         file.close()
 
     def protest(self):                  # 9. Если избиратель обнаруживает, что его бюллетень подсчитан неправильно, он протестует, посылая ЦИК : I, Ek(I, v), d
@@ -134,8 +152,8 @@ class Elector(object):
 
 C = CIK()
 
-E = Elector(1,"AAA")
-E2 = Elector(2,"dddd")
+E = Elector(1,"Ian Jesse Ward")
+E2 = Elector(2,"Erin Destiny Watson")
 
 C.getElectors("electors.txt")
 C.publishElectors()
@@ -146,9 +164,8 @@ E2.willVote("voters.txt")
 C.getVoters("voters.txt")
 C.publishVoters()
 
-
-E.vote("ттт")
-E2.vote("иии")
+E.vote("Jackson Blake Robinson")
+E2.vote("Jeremiah Jeremiah Flores")
 
 E.generateKeys()
 E.encryptBulletin()
@@ -163,4 +180,9 @@ C.getBulletinFromVoter("bul2.txt")
 C.publishBulletin()
 
 E.sentIdAndPk("a.txt")
+C.getIdAndPkFromVoter("a.txt")
+E2.sentIdAndPk("b.txt")
+C.getIdAndPkFromVoter("b.txt")
 C.decryptBulletin()
+C.getResult()
+C.publishResult()
