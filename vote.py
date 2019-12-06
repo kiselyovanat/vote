@@ -147,8 +147,10 @@ class Elector(object):
         file.write(str(self.id) + ',' + self.privateKey + '\n')
         file.close()
 
-    def protest(self):                  # 9. Если избиратель обнаруживает, что его бюллетень подсчитан неправильно, он протестует, посылая ЦИК : I, Ek(I, v), d
-        pass
+    def protest(self,filename):                  # 9. Если избиратель обнаруживает, что его бюллетень подсчитан неправильно, он протестует, посылая ЦИК : I, Ek(I, v), d
+        file = open(filename, 'w')
+        file.write(str(self.id) + ' ' + self.encryptedBulletin + ' ' + self.privateKey + '\n')
+        file.close()
 
 C = CIK()
 
@@ -186,3 +188,4 @@ C.getIdAndPkFromVoter("b.txt")
 C.decryptBulletin()
 C.getResult()
 C.publishResult()
+E2.protest("protest.txt")
